@@ -45,6 +45,8 @@ for (i in red.cat) {
 red$rate <- rate
 # Factor
 red$rate <- as.factor(red$rate)
+# Count "bad" and "good"
+table(red$rate)
 
 ##### Linear Regression EDA - Simple Analysis (Without CV) #####
 # LM model
@@ -92,55 +94,6 @@ cor.red <- cor(red[-13]) # Remove rate column
 cor.red
 # Visualize and cluster by high correlation
 corrplot(cor.red, order="hclust")
-
-##### Linear Regression - All Variables #####
-## K-fold CV (k = 10)
-ctrl <- trainControl(method="cv", number=10)
-preproc <- c("center", "scale")
-
-# Train the data for all variables
-set.seed(1)
-lm.red <- train(quality ~ ., data=red.train, method = "lm", trControl=ctrl,
-                preProcess=preproc)
-lm.red$results
-summary(lm.red)
-
-# Diagnostic plots
-par(mfrow=c(1,1))
-plot(red.train$quality ~ predict(lm.red), xlab="Predict", ylab="Actual", main="Actual vs. Predicted")
-par(mfrow=c(1,1))
-plot(resid(lm.red) ~ predict(lm.red), xlab="Predict", ylab="Residuals", main="Predicted Residuals vs. Predicted Values")
-
-# Identify important variables
-varImp(lm.red)
-
-## Test on test set
-red.pred.test <- predict(lm.red, red.test[-12]) # Remove quality feature for prediction
-# Measure test performance
-results.all <- postResample(red.pred.test, red.test$quality)
-results.all
-
-##### Linear Regression - Advanced Analysis (With CV) #####
-# Filter table
-red.train.imp <- dplyr::select(red.train, c('volatile.acidity', 'citric.acid',
-                                            'chlorides', 'total.sulfur.dioxide',
-                                            'pH', 'sulphates', 'alcohol',
-                                            'quality'))
-red.test.imp <- dplyr::select(red.test, c('volatile.acidity', 'citric.acid',
-                                        'chlorides', 'total.sulfur.dioxide',
-                                        'pH', 'sulphates', 'alcohol',
-                                        'quality'))
-# Create model
-set.seed(1)
-lm.red.imp <- train(quality ~ ., data=red.train.imp, method = "lm",
-                    trControl=ctrl, preProcess=preproc)
-lm.red.imp$results
-summary(lm.red.imp)
-# Test on test set
-red.pred.test.imp <- predict(lm.red.imp, red.test.imp[-8]) # Remove quality feature for prediction
-# Measure test performance
-results.imp <- postResample(red.pred.test.imp, red.test.imp$quality)
-results.imp
 
 ##### K-Means Clustering #####
 # Compare cluster value to quality data
@@ -192,6 +145,53 @@ grid.arrange(arrangeGrob(g1 + theme(legend.position="none"),
                          g3 + theme(legend.position="none"),
                          top ="Wine Quality Cluster Analysis (3 Top Important Variables)", ncol=1))
 
+##### Linear Regression - All Variables #####
+## K-fold CV (k = 10)
+ctrl <- trainControl(method="cv", number=10)
+preproc <- c("center", "scale", "corr")
+
+# Train the data for all variables
+set.seed(1)
+lm.red <- train(quality ~ ., data=red.train, method = "lm", trControl=ctrl,
+                preProcess=preproc)
+lm.red
+summary(lm.red)
+
+# Diagnostic plots
+par(mfrow=c(1,1))
+plot(red.train$quality ~ predict(lm.red), xlab="Predict", ylab="Actual", main="Actual vs. Predicted")
+par(mfrow=c(1,1))
+plot(resid(lm.red) ~ predict(lm.red), xlab="Predict", ylab="Residuals", main="Predicted Residuals vs. Predicted Values")
+
+# Identify important variables
+varImp(lm.red)
+
+## Test on test set
+red.pred.test <- predict(lm.red, red.test[-12]) # Remove quality feature for prediction
+# Measure test performance
+results.all <- postResample(red.pred.test, red.test$quality)
+results.all
+
+##### Linear Regression - Advanced Analysis (With CV) #####
+# Filter table
+red.train.imp <- dplyr::select(red.train, c('volatile.acidity', 'chlorides',
+                                            'total.sulfur.dioxide', 'sulphates',
+                                            'alcohol', 'quality'))
+red.test.imp <- dplyr::select(red.test, c('volatile.acidity', 'chlorides',
+                                          'total.sulfur.dioxide', 'sulphates',
+                                          'alcohol', 'quality'))
+# Create model
+set.seed(1)
+lm.red.imp <- train(quality ~ ., data=red.train.imp, method = "lm",
+                    trControl=ctrl, preProcess=preproc)
+lm.red.imp$results
+summary(lm.red.imp)
+# Test on test set
+red.pred.test.imp <- predict(lm.red.imp, red.test.imp[-6]) # Remove quality feature for prediction
+# Measure test performance
+results.imp <- postResample(red.pred.test.imp, red.test.imp$quality)
+results.imp
+
 ##### Decision Tree #####
 # Quality as the dependent variable
 fit <- rpart(quality ~ ., method="class", data=red[-13],
@@ -225,115 +225,106 @@ rpart.plot(fit.pruned.rate) # Tree wasn't pruned
 
 ##### Random Forest (With CV) - Quality (Numerical) #####
 ## ntree=5
-# Tune length is the max # of parameters = 11
 set.seed(1)
 red.rf.5 <- train(quality ~ ., data=red.train, method = "rf",
-                  trControl=ctrl, ntree=5, tuneLength=11,
-                  preProcess=preproc)
-red.rf.5 # mtry=9
-t5 <- red.rf.5$results[8,2] # RMSE
+                  trControl=ctrl, ntree=5, tuneLength=10,
+                  preProcess=c("center", "scale"))
+red.rf.5 # mtry=2
+t5 <- red.rf.5$results[1,2] # RMSE
 
 ## ntree=10
-# Tune length is the max # of parameters = 11
 set.seed(1)
 red.rf.10 <- train(quality ~ ., data=red.train, method = "rf",
-                   trControl=ctrl, ntree=10, tuneLength=11,
-                   preProcess=preproc)
+                   trControl=ctrl, ntree=10, tuneLength=10,
+                   preProcess=c("center", "scale"))
 red.rf.10 # mtry=2
 t10 <- red.rf.10$results[1,2] # RMSE
 
 ## ntree=50
-# Tune length is the max # of parameters = 11
 set.seed(1)
 red.rf.50 <- train(quality ~ ., data=red.train, method = "rf",
-                   trControl=ctrl, ntree=50, tuneLength=11,
-                   preProcess=preproc)
-red.rf.50 # mtry=2
-t50 <- red.rf.50$results[1,2] # RMSE
+                   trControl=ctrl, ntree=50, tuneLength=10,
+                   preProcess=c("center", "scale"))
+red.rf.50 # mtry=3
+t50 <- red.rf.50$results[2,2] # RMSE
 
 ## ntree=100
-# Tune length is the max # of parameters = 11
 set.seed(1)
 red.rf.100 <- train(quality ~ ., data=red.train, method = "rf",
-                    trControl=ctrl, ntree=100, tuneLength=11,
-                    preProcess=preproc)
-red.rf.100 # mtry=4
-t100 <- red.rf.100$results[3,2] # RMSE
+                    trControl=ctrl, ntree=100, tuneLength=10,
+                    preProcess=c("center", "scale"))
+red.rf.100 # mtry=3
+t100 <- red.rf.100$results[2,2] # RMSE
 
 # Default value (ntree=500)
-# Tune length is the max # of parameters = 11
 set.seed(1)
 red.rf.500 <- train(quality ~ ., data=red.train, method = "rf",
-                    trControl=ctrl, ntree=500, tuneLength=11,
-                    preProcess=preproc)
-red.rf.500 # mtry=4
-t500 <- red.rf.500$results[3,2] # RMSE
+                    trControl=ctrl, ntree=500, tuneLength=10,
+                    preProcess=c("center", "scale"))
+red.rf.500 # mtry=3
+t500 <- red.rf.500$results[2,2] # RMSE
 
 ## Assess the best RMSE value
 ntree <- cbind(c(5, 10, 50, 100, 500), c(t5, t10, t50, t100, t500))
-ntree[which.min(ntree[,2])] # ntree=500 has the min. RMSE
+ntree[which.min(ntree[,2])] # ntree=100 has the min. RMSE
 
 # Plot a sample tree from the selected random forest
-getTree(red.rf.50$finalModel)
+getTree(red.rf.100$finalModel)
 
 # Plot the error vs. number of trees
 par(mfrow=c(1,1))
-plot(red.rf.50$finalModel, main='Training Error vs. the Number of Trees')
+plot(red.rf.100, main="Number of Variable Subsets vs. RMSE (100 Trees)")
 
 # Random forest on test set
 set.seed(1)
 # Predict results
-red.rf.test <- predict(red.rf.50, red.test[-12])
+red.rf.test <- predict(red.rf.100, red.test[-12])
 # Measure test performance
 results.rf <- postResample(red.rf.test, red.test$quality)
+results.rf
 
 ##### Random Forest (With CV) - Rate (Categorical) #####
 ## ntree=5
-# Tune length is the max # of parameters = 11
 set.seed(1)
 rate.rf.5 <- train(rate ~ ., data=red.train.tar, method = "rf",
-                   trControl=ctrl, ntree=5, tuneLength=11,
-                   preProcess=preproc)
-rate.rf.5 # mtry=8
-t5.rate <- rate.rf.5$results[7,2] # Accuracy
+                   trControl=ctrl, ntree=5, tuneLength=10,
+                   preProcess=c("center", "scale"))
+rate.rf.5 # mtry=6
+t5.rate <- rate.rf.5$results[5,2] # Accuracy
 
 ## ntree=10
-# Tune length is the max # of parameters = 11
 set.seed(1)
 rate.rf.10 <- train(rate ~ ., data=red.train.tar, method = "rf",
-                    trControl=ctrl, ntree=10, tuneLength=11,
-                    preProcess=preproc)
-rate.rf.10 # mtry=5
-t10.rate <- rate.rf.10$results[4,2] # Accuracy
+                    trControl=ctrl, ntree=10, tuneLength=10,
+                    preProcess=c("center", "scale"))
+rate.rf.10 # mtry=3
+t10.rate <- rate.rf.10$results[2,2] # Accuracy
 
 ## ntree=50
-# Tune length is the max # of parameters = 11
 set.seed(1)
 rate.rf.50 <- train(rate ~ ., data=red.train.tar, method = "rf",
-                    trControl=ctrl, ntree=50, tuneLength=11,
-                    preProcess=preproc)
-rate.rf.50 # mtry=2
-t50.rate <- rate.rf.50$results[1,2] # Accuracy
+                    trControl=ctrl, ntree=50, tuneLength=10,
+                    preProcess=c("center", "scale"))
+rate.rf.50 # mtry=3
+t50.rate <- rate.rf.50$results[2,2] # Accuracy
 
 ## ntree=100
-# Tune length is the max # of parameters = 11
 set.seed(1)
 rate.rf.100 <- train(rate ~ ., data=red.train.tar, method = "rf",
-                     trControl=ctrl, ntree=100, tuneLength=11,
-                     preProcess=preproc)
-rate.rf.100 # mtry=2
-t100.rate <- rate.rf.100$results[1,2] # Accuracy
+                     trControl=ctrl, ntree=100, tuneLength=10,
+                     preProcess=c("center", "scale"))
+rate.rf.100 # mtry=3
+t100.rate <- rate.rf.100$results[2,2] # Accuracy
 
 # Default value (ntree=500)
-# Tune length is the max # of parameters = 11
 set.seed(1)
 rate.rf.500 <- train(rate ~ ., data=red.train.tar, method = "rf",
-                     trControl=ctrl, ntree=500, tuneLength=11,
-                     preProcess=preproc)
-rate.rf.500 # mtry=2
-t500.rate <- rate.rf.500$results[1,2] # Accuracy
+                     trControl=ctrl, ntree=500, tuneLength=10,
+                     preProcess=c("center", "scale"))
+rate.rf.500 # mtry=3
+t500.rate <- rate.rf.500$results[2,2] # Accuracy
 
-## Assess the best RMSE value
+## Assess the best accuracy value
 ntree.rate <- cbind(c(5, 10, 50, 100, 500),
                c(t5.rate, t10.rate, t50.rate, t100.rate, t500.rate))
 ntree.rate[which.min(ntree.rate[,2])] # ntree=5 has the max accuracy
@@ -343,7 +334,7 @@ getTree(rate.rf.5$finalModel)
 
 # Plot the error vs. number of trees
 par(mfrow=c(1,1))
-plot(rate.rf.5$finalModel, main='Training Error vs. the Number of Trees')
+plot(rate.rf.5, main="Number of Variable Subsets vs. Accuracy (5 Trees)")
 
 # Random forest on test set
 set.seed(1)
@@ -354,6 +345,7 @@ results.rf.rate <- postResample(rate.rf.test, red.test.tar$rate)
 results.rf.rate
 
 ##### SVM (With CV) #####
+# Link: https://rpubs.com/uky994/593668
 # Control parameters
 ctrl.svm <- trainControl(method="repeatedcv", number=10, repeats=3)
 
@@ -361,7 +353,9 @@ ctrl.svm <- trainControl(method="repeatedcv", number=10, repeats=3)
 set.seed(1)
 svm.red <- train(rate ~., data=red.train.tar, method="svmLinear",
                  trControl=ctrl.svm, preProcess=preproc,
-                 tuneLength=10)
+                 tuneGrid=expand.grid(C=seq(0, 2, length=10))) # Similar to tuneLength=10
+svm.red # Validated at C=0.44
+plot(svm.red, main="Linear SVM - Cost Parameter vs. Accuracy")
 # Predict results
 red.svm.test <- predict(svm.red, red.test.tar[-12])
 # Measure test performance
@@ -371,8 +365,9 @@ results.svm
 ## Radial SVM
 set.seed(1)
 svm.rad.red <- train(rate ~., data=red.train.tar, method="svmRadial",
-                 trControl=ctrl.svm, preProcess=preproc,
-                 tuneLength=10)
+                 trControl=ctrl.svm, preProcess=preproc, tuneLength=10)
+svm.rad.red # Validated at sigma=16
+plot(svm.rad.red, main="Radial SVM - Cost Parameter vs. Accuracy")
 # Predict results
 red.svm.rad.test <- predict(svm.rad.red, red.test.tar[-12])
 
@@ -382,10 +377,19 @@ results.svm.rad <- postResample(red.svm.rad.test, red.test.tar$rate)
 results.svm.rad
 
 ##### Naive Bayes (With CV) #####
+# Tuning parameters
+# Link: https://www.rdocumentation.org/packages/klaR/versions/0.6-15/topics/NaiveBayes
+search_grid <- expand.grid(
+  usekernel = c(TRUE, FALSE),
+  fL=c(0,0.5,1.0),
+  adjust=c(0,0.5,1.0)
+)
 set.seed(1)
 nb.red <- train(rate ~., data=red.train.tar, method="nb",
-                 trControl=ctrl, preProcess=preproc,
-                 tuneLength=10)
+                trControl=ctrl, preProcess=preproc,
+                tuneGrid=search_grid)
+nb.red
+plot(nb.red, main="Naive Bayes Tuning Parameters")
 # Predict results
 red.nb.test <- predict(nb.red, red.test.tar[-12])
 # Measure test performance
@@ -393,21 +397,61 @@ results.nb <- postResample(red.nb.test, red.test.tar$rate)
 results.nb
 
 ##### Test Data Evaluation - Quantitative #####
-# Model setup
+# Training - Model setup
 model_test <- list("LM - All Vars"=lm.red, "LM - Sig Vars"=lm.red.imp,
-                "Random Forest"=red.rf.50)
-# Resample data
+                "Random Forest"=red.rf.100)
+# Training - Resample data
 red.resamples <- resamples(model_test)
-# Plot performances
-bwplot(red.resamples, metric="RMSE", main="Quality Model Performance - RMSE")
+# Training - Plot performances
+# bwplot(red.resamples, metric="RMSE",
+#        main="Quality Model Training Performance - RMSE")
 bwplot(red.resamples, metric="Rsquared",
        main="Quality Model Performance - Rsquared")
 
+# Testing - Model setup
+model_name <- c("LM - All Vars", "LM - Sig Vars", "Random Forest")
+# Testing - Create dataframe
+red.t <- data.frame(
+  results.all, # Linear Model - All Variables
+  results.imp, # Linear Model - Significant Variables
+  results.rf # Random Forest
+)
+red.t <- t(red.t)
+red.t <- data.frame(cbind(red.t, Model=model_name))
+
+# Testing - Plot R^2
+ggplot(data=red.t, aes(x=Model, y=Rsquared)) +
+  geom_bar(stat="identity", color="black", fill="steelblue") +
+  labs(title="Quality Model Testing Performance - Rsquared")
+
+# Testing - Plot RMSE
+# ggplot(data=red.t, aes(x=Model, y=RMSE)) +
+#   geom_bar(stat="identity", color="black", fill="orangered4") +
+#   labs(title="Quality Model Testing Performance - RMSE")
+
 ##### Test Data Evaluation - Qualitative #####
-# Model setup
+# Training - Model setup
+model_cat_test <- list("Naive Bayes"=nb.red, "Random Forest"=rate.rf.5, "Linear SVM"=svm.red, "Radial SVM"=svm.rad.red)
+model_cat_test2 <- list("Linear SVM"=svm.red, "Radial SVM"=svm.rad.red)
+# Training - Resample data
+red.resamples.cat <- resamples(model_cat_test)
+red.resamples.cat2 <- resamples(model_cat_test2)
+# Training - Plot performances
+cat1 <- bwplot(red.resamples.cat, metric="Accuracy")
+cat2 <- bwplot(red.resamples.cat2, metric="Accuracy")
+# cat3 <- bwplot(red.resamples.cat, metric="Kappa")
+# cat4 <- bwplot(red.resamples.cat2, metric="Kappa")
+# Accuracy grid boxplots
+grid.arrange(arrangeGrob(cat1, cat2, ncol=1,
+                         top ="Rate Model Training Performance - Accuracy"))
+# Accuracy grid boxplots
+# grid.arrange(arrangeGrob(cat3, cat4, ncol=1,
+#                          top ="Rate Model Training Performance - Kappa"))
+
+# Testing - Model setup
 model_cat_name <- c("Linear SVM", "Radial SVM", "Random Forest",
                     "Naive Bayes")
-# Create dataframe
+# Testing - Create dataframe
 red.cat <- data.frame(
   results.svm, # Linear SVM
   results.svm.rad, # Radial SVM
@@ -417,12 +461,12 @@ red.cat <- data.frame(
 red.cat<- t(red.cat)
 red.cat <- data.frame(cbind(red.cat, Model=model_cat_name))
 
-# Plot the accuracy
+# Testing - Plot the accuracy
 ggplot(data=red.cat, aes(x=Model, y=Accuracy)) +
   geom_bar(stat="identity", color="black", fill="steelblue") +
   labs(title="Rating Model Performance - Accuracy")
 
 # Plot the kappa
-ggplot(data=red.cat, aes(x=Model, y=Kappa)) +
-  geom_bar(stat="identity", color="black", fill="orangered4") +
-  labs(title="Rating Model Performance - Kappa")
+# ggplot(data=red.cat, aes(x=Model, y=Kappa)) +
+#   geom_bar(stat="identity", color="black", fill="orangered4") +
+#   labs(title="Rating Model Performance - Kappa")
